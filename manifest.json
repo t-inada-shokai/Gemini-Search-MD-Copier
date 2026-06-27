@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini-Search-MD-Copier",
+  "version": "1.0",
+  "description": "Google検索のAI回答やGeminiの出力結果を、ワンクリックできれいなMarkdown形式でコピーします",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_title": "Markdown形式でコピー"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
