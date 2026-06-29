@@ -98,16 +98,16 @@
             questionText = sanitizePrompt(questionText);
 
             // アップロードファイル
-            const importFileBlock = pair.querySelectorAll("[jsuid='LNxi5b_7']");
+            const importFileBlock = pair.querySelectorAll("div.AdmSkc div.HAzzKb");
             if (importFileBlock.length !==0 ) {
               importFileBlock.forEach((block, index) => {
-                const filename = block.querySelector('span>span').innerText;
+                const filename = block.querySelector('span>span.VndcI').innerText;
                 questionText += "\nUpload_File: \`"+filename+"\`\n";
               });
             }
           }
 
-          const answerContainer = pair.querySelector("[data-container-id='main-col']");
+          const answerContainer = pair.querySelector("[jsname='KFl8ub']");
           let answerText = "（回答の取得に失敗）";
           if (answerContainer) {
             answerText = convertToMarkdown(answerContainer);
