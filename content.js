@@ -1,4 +1,6 @@
 (function() {
+  const indentUnit = '  ';
+
   let markdownText = "";
 
   // 1. クラスに依存しない、不変性の高い属性（data-* / jsname）ベースで抽出を試みる
@@ -35,7 +37,7 @@
         if (chatPairs.length === 0) return null;
 
         chatPairs.forEach((pair, index) => {
-          const questionBlock = pair.querySelector("div.query-content");
+          const questionBlock = pair.querySelector("user-query-content div.query-content");
           let questionText = "（質問の取得に失敗）";
           if (questionBlock) {
             questionText = convertToMarkdownGemini(questionBlock);
@@ -45,7 +47,7 @@
             // プロンプトのサニタイズ
             questionText = sanitizePrompt(questionText);
             // アップロードファイル
-            const importFileBlock = questionBlock.querySelectorAll("user-query-file-preview");
+            const importFileBlock = pair.querySelectorAll("user-query-file-preview");
             if (importFileBlock.length !==0 ) {
               importFileBlock.forEach((block, index) => {
                 const filename = block.querySelector('button.new-file-preview-file').getAttribute('aria-label');
@@ -74,16 +76,16 @@
           questionText = sanitizePrompt(questionText);
         }
 
-        const answerContainer = abstract.querySelector("[data-container-id='main-col']");
+        const answerContainer = abstract.querySelector("[jsname='CS7uPe']");
         let answerText = "（回答の取得に失敗）";
         if (answerContainer) {
-          answerText = convertToMarkdown(answerContainer);
+          answerText = convertToMarkdown(answerContainer.querySelector("[jsname='KFl8ub']"));
         }
 
         resultText += `## 質問\n${questionText}\n\n### AIの回答\n${answerText}\n\n---\n\n`;
       } else {
         // AIモード
-        const chatPairs = document.querySelectorAll("[jsname='RH7zg']");
+        const chatPairs = document.querySelectorAll("[jsname='CS7uPe']");
         if (chatPairs.length === 0) return null;
 
         chatPairs.forEach((pair, index) => {
@@ -153,12 +155,12 @@
   }
 
   // =============================================================
-  // プロンプト専用のサニタイズ共通関数（ここで一括管理）
+  // プロンプト専用のサニタイズ共通関数
   // =============================================================
   function sanitizePrompt(text) {
     if (!text) return "";
     
-    text = '\n```\n'+text+'\n```\n'; 
+    text = '\n\n```\n\n'+text+'\n\n```\n\n'; 
     
     return text;
   }
@@ -189,10 +191,13 @@
     const role = element.getAttribute('role');
     const jsname = element.getAttribute('jsname');
 
+    if (classList.contains('hide-from-message-actions')) return true;
+
     if (classList.contains('code-block-decoration') && classList.contains('header-formatted')) return true;
     if (classList.contains('cdk-visually-hidden') && (classList.contains('screen-reader-user-query-label') || classList.contains('screen-reader-model-response-label'))) return true;
     if (tagName === 'span' && element.hasAttribute('data-animation-atomic')) return true;
-    if (tagName === 'div' && element.classList.contains('file-preview-container')) return true;
+    if (tagName === 'div' && classList.contains('file-preview-container')) return true;
+    if (tagName === 'div' && classList.contains('sequence-container')) return true;
     if (element.getAttribute('aria-label') === '関連リンクを表示') return true;
 
     const text = element.innerText ? element.innerText.trim() : '';
@@ -210,11 +215,17 @@
     return paddingLeft + marginLeft;
   }
 
-  function normalizeStringForComparison(str) {
+  function toHankakuNumString(str) {
     if (!str) return "";
     return str
-      .replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
-      .replace(/[－．]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+      .replace(/[０-９－．]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+      .trim();
+  }
+
+  function toZenkakuNumString(str) {
+    if (!str) return "";
+    return str
+      .replace(/[0-9\-\.]/g, (s) => String.fromCharCode(s.charCodeAt(0) + 0xFEE0))
       .trim();
   }
 
@@ -232,6 +243,8 @@
     const lines = result.split('\n');
     const processedLines = lines.map(line => {
       let currentLine = line;
+      if (!line) return line;
+
       if (currentLine.includes(':::NUM_START:::') && currentLine.includes(':::NUM_END:::')) {
         // 隔離マーカー（:::NUM_START:::〜:::NUM_END:::）を順番に検査
         currentLine = currentLine.replace(
@@ -242,10 +255,10 @@
             // p3,p4で識別子の前後
             // p5は:::xxx:::直後の部分
             // p6は:::NUM_START:::直後の部分
-            const currentNormalized = normalizeStringForComparison(p1.trim());
-            const backupNormalized = normalizeStringForComparison(p6);
+            const currentNormalized = toHankakuNumString(p1.trim());
+            const backupNormalized = toHankakuNumString(p6);
             if (p5) {
-              const middleNormalized = normalizeStringForComparison(p5.trim());
+              const middleNormalized = toHankakuNumString(p5.trim());
               if (currentNormalized === middleNormalized) {
                 // 指定の前後で同じなら指定の位置を前にずらす
                 if (middleNormalized === backupNormalized) {
@@ -275,11 +288,21 @@
           });
       }
 
-      // 行の先頭にある新しいリスト用連番（例: `- ３－２．`）をずれないように全角に変換する
-      currentLine = currentLine.replace(
-        /^(\s*)([0-9０-９\.\-－．]+)(\s)/,
+      currentLine = currentLine.replace(/^(\s*)-\s([0-9０-９\.\-－．]+)\s###\s([0-9０-９\.\-－．]+[\.\-－．\s]+)/,
         (match, p1, p2, p3) => {
-          return p1+normalizeStringForComparison(p2)+p3;
+          if (toHankakuNumString(p2) === toHankakuNumString(p3)) {
+            return p1+'### '+p3+' ';
+          } else {
+            return p1+'- '+p2+' ### '+p3+' ';
+          }
+        }
+      )
+
+      // 行の先頭にある新しいリスト用連番（例: ` ３－２．`）をずれないように全角に変換する
+      currentLine = currentLine.replace(
+        /^(\s*)([0-9０-９][0-9０-９\.\-－．]+)(\s)/,
+        (match, p1, p2, p3) => {
+          return p1+toZenkakuNumString(p2)+p3;
         }
       );
       currentLine = sanitizeSignature(currentLine);
@@ -319,12 +342,26 @@
     }
 
     const element = node;
-    const tagName = element.tagName.toLowerCase();
     if (shouldIgnoreElement(element)) {
       return '';
     }
+    const tagName = element.tagName.toLowerCase();
 
-    const rawText = element.innerText ? decorateSignature(element.innerText.trim()) : '';
+    let childContent = '';
+    if (tagName === 'ol') {
+      let liCount = 1;
+      element.childNodes.forEach(child => {
+        if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
+          childContent += convertToMarkdown(child, liCount++);
+        } else {
+          childContent += convertToMarkdown(child);
+        }
+      });
+    } else {
+      element.childNodes.forEach(child => { childContent += convertToMarkdown(child); });
+    }
+
+    const rawText = childContent;
     const numberRegex = /^([0-9０-９]+(?:[\.．\-－][0-9０-９]+)*[\.．\-－]?)/;
     const bulletRegex = /^[・●\-\*]/;
 
@@ -343,9 +380,7 @@
         const numMatch = rawText.match(numberRegex);
         if (numMatch) {
           const detectedNumber = numMatch[0];
-          const zenkakuNumber = detectedNumber.replace(/[0-9\.\-]/g, (char) => {
-            return String.fromCharCode(char.charCodeAt(0) + 0xFEE0);
-          });
+          const zenkakuNumber = toZenkakuNumString(detectedNumber);
           if (cleanText.startsWith(detectedNumber)) {
             cleanText = cleanText.substring(detectedNumber.length).trim();
           }
@@ -362,7 +397,7 @@
       const totalLeftSpace = getLeftPixels(element);
       let indentLevel = Math.floor(totalLeftSpace / 20);
       indentLevel = Math.max(0, indentLevel);
-      const indentStr = '  '.repeat(indentLevel);
+      const indentStr = indentUnit.repeat(indentLevel);
       const numMatch = rawText.match(numberRegex);
       let detectedNumber = "";
       if (numMatch) {
@@ -379,33 +414,17 @@
           cleanText = cleanText.substring(detectedNumber.length).trim();
         }
         cleanText = cleanText.replace(/^[・●\-\.\s\_、。]+/, '');
-        const zenkakuNumber = detectedNumber.replace(/[0-9\.\-]/g, (char) => {
-          return String.fromCharCode(char.charCodeAt(0) + 0xFEE0);
-        });
-        const formattedChild = cleanText.replace(/\n/g, `\n${indentStr}    `);
-        return `${indentStr}- ${zenkakuNumber} ${formattedChild}\n`;
+        const zenkakuNumber = toZenkakuNumString(detectedNumber);
+        const formattedChild = cleanText.replace(/\n/g, `\n${indentStr}${indentUnit}`);
+        return `${indentStr}${zenkakuNumber} ${formattedChild}\n`;
       } else {
         let childContent = '';
         element.childNodes.forEach(child => { childContent += convertToMarkdown(child); });
         let cleanText = childContent.trim();
         cleanText = cleanText.replace(/^[・●\-\*]\s*/, '');
-        const formattedChild = cleanText.replace(/\n/g, `\n${indentStr}    `);
+        const formattedChild = cleanText.replace(/\n/g, `\n${indentStr}${indentUnit}`);
         return `${indentStr}- ${formattedChild}\n`;
       }
-    }
-
-    let childContent = '';
-    if (tagName === 'ol') {
-      let liCount = 1;
-      element.childNodes.forEach(child => {
-        if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
-          childContent += convertToMarkdown(child, liCount++);
-        } else {
-          childContent += convertToMarkdown(child);
-        }
-      });
-    } else {
-      element.childNodes.forEach(child => { childContent += convertToMarkdown(child); });
     }
 
     switch (tagName) {
@@ -425,11 +444,13 @@
             langName = treatLangnameFilename(decorateSignature(spanEl.innerText.trim()));
           }
         }
-        return `\n\`\`\`${langName}\n${childContent.trim()}\n\`\`\`\n\n`;
+        return `\n\n\`\`\`${langName}\n\n${childContent.trim()}\n\n\`\`\`\n\n`;
 
       case 'h1': return childContent?.trim() ? `\n# ${childContent.trim()}\n\n` : '';
       case 'h2': return childContent?.trim() ? `\n## ${childContent.trim()}\n\n` : '';
       case 'h3': return childContent?.trim() ? `\n### ${childContent.trim()}\n\n` : '';
+      case 'h4': return childContent?.trim() ? `\n#### ${childContent.trim()}\n\n` : '';
+      case 'h5': return childContent?.trim() ? `\n##### ${childContent.trim()}\n\n` : '';
       case 'p': return childContent.trim() ? `${childContent.trim()}\n` : '';
       case 'br': return '\n';
       case 'strong':
@@ -446,6 +467,31 @@
   function convertToMarkdownGemini(node, olIndex = null) {
     if (node.nodeType === Node.TEXT_NODE) {
       let val = decorateSignature(node.nodeValue);
+      if (!val) return '';
+
+      // テキスト内改行に対する処理
+      if (val.includes('\n')) {
+        const lines = val.split('\n');
+        return lines.map(line => {
+          const trimmed = line.trimStart(); 
+          if (!trimmed) return '';
+
+          const numberRegex = /^([0-9０-９]+(?:[\.．\-－][0-9０-９]+)*[\.．\-－]?)/;
+          const match = trimmed.match(numberRegex);
+
+          if (match) {
+            const detectedNumber = match[0];
+            const escaped = detectedNumber.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const reg = new RegExp(`^(\\s*)(${escaped})([\\s\\.\\-\\、\\。．]*)`);
+            
+            return line.replace(reg, (m, p1, p2, p3) => {
+              return `${p1}${p2}${p3}:::NUM_START:::${p2}:::NUM_END:::`;
+            });
+          }
+          return escapeBackticks(line);
+        }).join('\n');
+      }
+
       const numberRegex = /^([0-9０-９]+(?:[\.．\-－][0-9０-９]+)*[\.．\-－]?)/;
       const match = val.trimStart().match(numberRegex);
       if (match) {
@@ -465,58 +511,54 @@
     }
 
     const element = node;
-    const tagName = element.tagName.toLowerCase();
     if (shouldIgnoreElementGemini(element)) {
       return '';
     }
+    const tagName = element.tagName.toLowerCase();
 
-    const rawText = element.innerText ? decorateSignature(element.innerText.trim()) : '';
+    let childContent = '';
+    if (tagName === 'ol') {
+      let liCount = 1;
+      element.childNodes.forEach(child => {
+        if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
+          childContent += convertToMarkdownGemini(child, liCount++);
+        } else {
+          childContent += convertToMarkdownGemini(child);
+        }
+      });
+    } else if (tagName === 'sequence') {
+      childContent = '';
+    } else {
+      element.childNodes.forEach(child => { childContent += convertToMarkdownGemini(child); });
+    }
+
+    const rawText = childContent;
     const numberRegex = /^([0-9０-９]+(?:[\.．\-－][0-9０-９]+)*[\.．\-－]?)/;
     const bulletRegex = /^[・●\-\*]/;
 
     if (tagName === 'div') {
       const role = element.getAttribute('role');
       const ariaLevel = element.getAttribute('aria-level');
-      if ((role === 'heading' && (ariaLevel === '2' || ariaLevel === '3')) || element.hasAttribute('data-is-title')) {
+      if (role === 'heading' && (ariaLevel === '2' || ariaLevel === '3')) {
         let childContent = '';
         element.childNodes.forEach(child => { childContent += convertToMarkdownGemini(child); });
-        // return childContent.trim() ? `\n### ${childContent.trim()}\n\n` : '';
         return childContent.trim() ? `\n${childContent.trim()}\n\n` : '';
-      }
-      if (numberRegex.test(rawText) && (role === 'heading' || element.matches("[class*='title'], [class*='heading'], [style*='font-weight']"))) {
-        let childContent = '';
-        element.childNodes.forEach(child => { childContent += convertToMarkdownGemini(child); });
-        let cleanText = childContent.trim();
-        const numMatch = rawText.match(numberRegex);
-        if (numMatch) {
-          const detectedNumber = numMatch[0];
-          const zenkakuNumber = detectedNumber.replace(/[0-9\.\-]/g, (char) => {
-            return String.fromCharCode(char.charCodeAt(0) + 0xFEE0);
-          });
-          if (cleanText.startsWith(detectedNumber)) {
-            cleanText = cleanText.substring(detectedNumber.length).trim();
-          }
-          cleanText = `${zenkakuNumber} ${cleanText}`;
-        }
-        return `\n#### ${cleanText}\n\n`;
-      }
-      if (element.classList.contains('file-preview-container')) {
-        let list = '';
-        element.querySelectorAll(".file-query-preview [data-test-id='filename-label']").forEach((item) => {
-          list += '`'+item.innerText+'`';
-        });
-        return (list) ? "\nImport_file[${list.trim()}]\n" : '';
       }
     }
 
-    const isPseudoListItem = (tagName === 'div' && (numberRegex.test(rawText) || bulletRegex.test(rawText)));
+    const isSequenceComponent = element.classList.contains('sequence-event') || 
+                                element.classList.contains('sequence-event-marker-container') || 
+                                element.classList.contains('sequence-event-marker') || 
+                                element.closest('sequence');
+
+    const isPseudoListItem = (tagName === 'div' && !isSequenceComponent && (numberRegex.test(rawText) || bulletRegex.test(rawText)));
 
     if (tagName === 'li' || isPseudoListItem) {
       if (!rawText) return '';
       const totalLeftSpace = getLeftPixels(element);
       let indentLevel = Math.floor(totalLeftSpace / 20);
       indentLevel = Math.max(0, indentLevel);
-      const indentStr = '  '.repeat(indentLevel);
+      const indentStr = indentUnit.repeat(indentLevel);
       const numMatch = rawText.match(numberRegex);
       let detectedNumber = "";
       if (numMatch) {
@@ -533,37 +575,21 @@
           cleanText = cleanText.substring(detectedNumber.length).trim();
         }
         cleanText = cleanText.replace(/^[・●\-\.\s\_、。]+/, '');
-        const zenkakuNumber = detectedNumber.replace(/[0-9\.\-]/g, (char) => {
-          return String.fromCharCode(char.charCodeAt(0) + 0xFEE0);
-        });
-        const formattedChild = cleanText.replace(/\n/g, `\n${indentStr}    `);
-        return `${indentStr}- ${zenkakuNumber} ${formattedChild}\n`;
+        const zenkakuNumber = toZenkakuNumString(detectedNumber);
+        const formattedChild = cleanText.replace(/\n/g, `\n${indentStr}${indentUnit}`);
+        return `${indentStr}${zenkakuNumber} ${formattedChild}\n`;
       } else {
         let childContent = '';
         element.childNodes.forEach(child => { childContent += convertToMarkdownGemini(child); });
         let cleanText = childContent.trim();
         cleanText = cleanText.replace(/^[・●\-\*]\s*/, '');
-        const formattedChild = cleanText.replace(/\n/g, `\n${indentStr}    `);
+        const formattedChild = cleanText.replace(/\n/g, `\n${indentStr}${indentUnit}`);
         return `${indentStr}- ${formattedChild}\n`;
       }
     }
 
-    let childContent = '';
-    if (tagName === 'ol') {
-      let liCount = 1;
-      element.childNodes.forEach(child => {
-        if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
-          childContent += convertToMarkdownGemini(child, liCount++);
-        } else {
-          childContent += convertToMarkdownGemini(child);
-        }
-      });
-    } else {
-      element.childNodes.forEach(child => { childContent += convertToMarkdownGemini(child); });
-    }
-
     switch (tagName) {
-      case 'div': return childContent.trim() ? `\n${childContent.trim()}\n\n` : '';
+      case 'div': return childContent.trim() ? `${childContent.trim()}\n` : '';
       case 'hr': return '\n---\n\n';
       case 'code':
         if (element.parentNode && element.parentNode.tagName.toLowerCase() === 'pre') {
@@ -582,12 +608,14 @@
             }
           }
         }
-        return `\n\`\`\`${langName}\n${childContent.trim()}\n\`\`\`\n\n`;
+        return `\n\`\`\`${langName}\n\n${childContent.trim()}\n\n\`\`\`\n\n`;
 
       case 'h1': return childContent?.trim() ? `\n# ${childContent.trim()}\n\n` : '';
       case 'h2': return childContent?.trim() ? `\n## ${childContent.trim()}\n\n` : '';
       case 'h3': return childContent?.trim() ? `\n### ${childContent.trim()}\n\n` : '';
-      case 'p': return childContent.trim() ? `${childContent.trim()}\n` : '';
+      case 'h4': return childContent?.trim() ? `\n#### ${childContent.trim()}\n\n` : '';
+      case 'h5': return childContent?.trim() ? `\n##### ${childContent.trim()}\n\n` : '';
+      case 'p': return childContent?.trim() ? `${childContent.trim()}\n` : '';
       case 'br': return '\n';
       case 'strong':
       case 'b': return childContent ? `:::BOLD_START:::${childContent}:::BOLD_END:::` : '';
@@ -596,6 +624,41 @@
       case 'a': return `[${childContent}](${element.getAttribute('href') || ''})`;
       case 'ul':
       case 'ol': return `\n${childContent}\n`;
+      case 'sequence':
+        childContent = ''; 
+
+        const sequencelines = element.querySelectorAll("div.sequence-event");
+        if (sequencelines) {
+          const totalLeftSpace = getLeftPixels(element);
+          let indentLevel = Math.floor(totalLeftSpace / 20);
+          indentLevel = Math.max(0, indentLevel);
+          const indentStr = indentUnit.repeat(indentLevel);
+
+          sequencelines.forEach(child => {
+            const markerEl = child.querySelector("div.sequence-event-marker");
+            const divmarker = markerEl ? markerEl.innerText.trim() : "";
+            
+            const divtitle = convertToMarkdownGemini(
+                child.querySelector("div.sequence-event-title"));
+            const divsubtitle = convertToMarkdownGemini(
+              child.querySelector("div.sequence-event-subtitle"));
+            const divdetail = convertToMarkdownGemini(
+              child.querySelector("div.sequence-event-description>structured-node-sequence"));
+            
+            if (divmarker) {
+              const zenkakuMarker = toZenkakuNumString(divmarker);
+              childContent += `${indentStr}- ${zenkakuMarker} ${divtitle.trim()}\n`
+                + `${indentStr}${indentUnit}:::ITALIC_START:::${divsubtitle.trim()}:::ITALIC_END:::\n`
+                + `${indentStr}${indentUnit}${divdetail.trim()}\n`;
+            } else {
+              childContent += `${indentStr}- ${divtitle.trim()}\n`
+                + `${indentStr}${indentUnit}:::ITALIC_START:::${divsubtitle.trim()}:::ITALIC_END:::\n`
+                + `${indentStr}${indentUnit}${divdetail.trim()}\n`;
+            }
+          });
+        }
+        return `\n${childContent}\n`;
+
       default: return childContent;
     }
   }
