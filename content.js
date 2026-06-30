@@ -233,7 +233,7 @@
   // 内部処理用のプレースホルダーのクリーンアップ処理
   // =============================================================
   function finalizeMarkdownStyles(text) {
-    let result = text;
+    let result = reIndentMarkdownStyles(text);
     
     //  装飾の空打ちをクリーンアップ
     result = result.replace(/:::BOLD_START:::\s*:::BOLD_END:::/g, '');
@@ -318,6 +318,67 @@
     result = result.replace(/:::ITALIC_END:::/g, '*');
 
     return result;
+  }
+
+  /**
+   * インデントを論理階層に基づいて再調整する関数
+   * @param {string} markdownText - 変換後のMarkdown文字列
+   * @returns {string} - インデントが調整されたMarkdown文字列
+   */
+  function reIndentMarkdownStyles(markdownText) {
+    const lines = markdownText.split('\n');
+    const processedLines = [];
+    
+    // 辞書構造: { [originalIndent]: targetLevel }
+    // 例: { 0: 0, 4: 1, 8: 2 }
+    let indentMap = { 0: 0 };
+    let currentMaxDepth = 0; // 文字数ではなく「階層の深さ（0, 1, 2...）」を管理
+
+    for (let line of lines) {
+      // 行頭のスペース数を計測
+      const originalIndent = line.search(/\S|$/);
+      const content = line.trim();
+      
+      // 空行はそのまま維持
+      if (content === "") {
+        processedLines.push("");
+        continue;
+      }
+
+      // 1 & 2. 辞書にないインデントなら登録し、最大深度（階層）を更新
+      if (indentMap[originalIndent] === undefined) {
+        currentMaxDepth += 1; // 階層を「1」ずつ増やす
+        indentMap[originalIndent] = currentMaxDepth;
+      }
+
+      // 4. 前行と比較して大幅な減少（インデント戻り）が発生した場合のクリーンアップ
+      const lastOriginalIndent = processedLines.length > 0 ? getIndent(lines[processedLines.length - 1]) : 0;
+      if (originalIndent < lastOriginalIndent) {
+          // 現在のインデントより深い階層の辞書データを削除する
+          Object.keys(indentMap).forEach(key => {
+              if (parseInt(key) > originalIndent) {
+                  delete indentMap[key];
+              }
+          });
+          // 最大階層を再計算
+          currentMaxDepth = indentMap[originalIndent] || 0;
+      }
+
+      // 3. 辞書に沿って置換（インデントを適用）
+      const newIndentLevel = indentMap[originalIndent]; // ここには 0, 1, 2... が入る
+      const indentedLine = indentUnit.repeat(newIndentLevel) + content; // indentUnitを階層の数だけ繰り返す
+      processedLines.push(indentedLine);
+    }
+
+    return processedLines.join('\n');
+  }
+
+  /**
+   * ヘルパー：行頭のスペース数を取得
+   */
+  function getIndent(line) {
+      if (!line) return 0;
+      return line.search(/\S|$/);
   }
 
   function convertToMarkdown(node, olIndex = null) {
