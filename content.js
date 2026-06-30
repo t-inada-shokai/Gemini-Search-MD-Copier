@@ -80,6 +80,11 @@
         let answerText = "（回答の取得に失敗）";
         if (answerContainer) {
           answerText = convertToMarkdown(answerContainer.querySelector("[jsname='KFl8ub']"));
+          
+          const linksContainer = answerContainer.querySelector("[data-xid='aim-aside-initial-corroboration-container']");
+          if (linksContainer) {
+            answerText += convertLinks(linksContainer);
+          }
         }
 
         resultText += `## 質問\n${questionText}\n\n### AIの回答\n${answerText}\n\n---\n\n`;
@@ -113,6 +118,11 @@
           let answerText = "（回答の取得に失敗）";
           if (answerContainer) {
             answerText = convertToMarkdown(answerContainer);
+                        
+            const linksContainer = pair.querySelector("[data-xid='aim-aside-initial-corroboration-container']");
+            if (linksContainer) {
+              answerText += convertLinks(linksContainer);
+            }
           }
 
           resultText += `## 質問 [${index + 1}]\n${questionText}\n\n### AIの回答\n${answerText}\n\n---\n\n`;
@@ -761,5 +771,40 @@
       }
     }
     return langName ? langName+':'+arg : arg;
+  }
+
+  function convertLinks(node) {
+    let summary = node.querySelector("button[data-xid='x92FHb'] span.lQfa5>span").innerText;
+    let listscount = 0;
+    if (summary) {
+      let lists = '';
+      node.querySelectorAll("ul[data-container-id='undefined']>li").forEach((item) => {
+        const address = item.querySelector("a.NDNGvf").href;
+        const title = item.querySelector("div.Nn35F>span").innerText;
+        const detail = item.querySelector("span.vhJ6Pe").innerText;
+        const owner = item.querySelector("div.jEYmO>span.Z1JFYc>span.R0r5R>span").innerText;
+        //const icon = item.querySelector("div.w8lk7d>div.BMzdlb>div>img").src;
+        //const pict = item.querySelector("div.fNe8gf>div.VKalRc>img.nHPWpc").src;
+        lists += `\n- <span>`
+          + `<p>`
+          //+ `<img src="${icon}" style="height: 1em; vertical-align: middle;" />`
+          + `${owner}</p>`
+          + `<p><a href="${address}">${title}</a></p>`
+          + `<p>${detail}</p>`
+          //+ `<img src="${pict}"></img>`
+          + `</span>\n`;
+          listscount++;
+      });
+      const numtext = summary.match(/([0-9０-９]+)件/);
+      if (numtext) {
+        const summarycount = parseInt(toHankakuNumString(numtext[1]), 10);
+        if (summarycount>listscount) {
+          summary = summary.replace(`${numtext[1]}件`, `${numtext[1]}件 の一部`);
+        }
+      }
+      return `\n\n<details><summary>関連サイト(${summary})</summary>\n\n${lists}\n</details>\n\n`;
+    } else {
+      return '';
+    }
   }
 })();
