@@ -81,7 +81,7 @@
         if (answerContainer) {
           answerText = convertToMarkdown(answerContainer.querySelector("[jsname='KFl8ub']"));
           
-          const linksContainer = answerContainer.querySelector("[data-xid='aim-aside-initial-corroboration-container']");
+          const linksContainer = answerContainer.querySelector("[data-container-id='rhs-col']");
           if (linksContainer) {
             answerText += convertLinks(linksContainer);
           }
@@ -119,7 +119,7 @@
           if (answerContainer) {
             answerText = convertToMarkdown(answerContainer);
                         
-            const linksContainer = pair.querySelector("[data-xid='aim-aside-initial-corroboration-container']");
+            const linksContainer = pair.querySelector("[data-container-id='rhs-col']");
             if (linksContainer) {
               answerText += convertLinks(linksContainer);
             }
@@ -778,7 +778,11 @@
     let listscount = 0;
     if (summary) {
       let lists = '';
-      node.querySelectorAll("ul[data-container-id='undefined']>li").forEach((item) => {
+      let basenode = node.querySelector("div[data-type='hovc']");
+      if (!basenode) {
+        basenode = node.querySelector("[data-xid='aim-aside-initial-corroboration-container']")
+      }
+      basenode.querySelectorAll("ul[data-container-id='undefined']>li").forEach((item) => {
         const address = item.querySelector("a.NDNGvf").href;
         const title = item.querySelector("div.Nn35F>span").innerText;
         const detail = item.querySelector("span.vhJ6Pe").innerText;
